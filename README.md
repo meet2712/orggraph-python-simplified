@@ -13,41 +13,47 @@ Python generates two independent datasets:
 
 SQLite stores two source tables: `companies` and `employees`. Headcount, company size, role classification, manager candidates, scores, decisions and audit fields are calculated by the views in [`schema.sql`](schema.sql). There is no persisted employee-to-manager mapping, so inserting or changing an employee immediately changes the relevant view results.
 
-The inference is five views in a row:
+The inference is six views in a row:
 
-1. `employee_role_classification` cleans the title text and reads off a level (CEO, C-Suite, VP / Head, Director, Manager, Team Lead, Senior IC, ...) and a function (Engineering, Sales, ...).
-2. `employee_reporting_features` adds a role family (`software_engineering`, `data_engineering`, `quality`, `sales_smb`, ...) and, for executives, the portfolio they own. Backend, frontend and general software-development titles share the `software_engineering` family. The label is useful for consistent classification, but it is too broad to accept a reporting line by itself when team evidence is missing.
-3. `employee_manager_candidates` pairs each person with everyone in the same company who holds a management title above them and shares a team, a parent team, a portfolio or a specialty.
-4. `employee_manager_scores` names the first rule in `reporting_rules` that fits each pair and takes that rule's score.
-5. `employee_reporting_decisions` keeps the best two candidates per person and accepts the best only when its score reaches 0.98 and leads the runner-up by 0.04. Everyone else is unresolved, with the rule and a one-line reason attached.
+1. `employee_role_classification` cleans the title text, writes out short forms such as `sr`, `mgr` and `eng`, and reads off a level (CEO, C-Suite, VP / Head, Director, Manager, Team Lead, Senior IC, ...) and a department (Engineering, Sales, ...). It also checks the team: a team path is believed only when it contains the department named in the title.
+2. `employee_reporting_features` settles each person's team and adds the rank from `reporting_ladder`. A team that fits is kept. A missing or contradicted team is filled in only when one team is possible: the department has a single team, or exactly one manager has no team and exactly one team has no manager. Team leads are placed the same way.
+3. `employee_manager_candidates` pairs each person with the people they could report to: leads and managers on their own team, and for managers the people one team up. People at the right level elsewhere in the department are kept as well, because one of them may be the real manager with a wrong or missing team.
+4. `employee_manager_scores` finds the nearest manager on the person's own team path, meaning the lowest rank found there, and gives that pair a strong rule named after the two levels. Someone who could sit in between gets a rival rule. Everyone else gets a weak rule.
+5. `employee_top_manager_candidates` keeps the best candidate and the runner-up.
+6. `employee_reporting_decisions` accepts the best candidate only when its score reaches 0.98 and leads the runner-up by 0.04. Everyone else is unresolved, with the rule and a one-line reason attached.
 
 The Flask app reads those SQL results and renders the org chart. A company-scoped query generated from the same view definitions avoids scoring all 500 companies for each page request.
 
 ## The rules
 
-Every reporting line in the app comes from one of these rules. The first rule that fits a pair wins, in this order. `select * from reporting_rules` returns the same table from the database.
+Every reporting line in the app carries one of these rule names. `select * from reporting_rules` returns the same table from the database.
 
 | Rule | Score | Matches |
 |---|---|---|
-| `specialty_match` | 0.995 | Team is missing on one side, but the IC and the manager share a specific specialty |
+| `exec_to_ceo` | 0.99 | Executive reports to the CEO |
 | `vp_to_matching_exec` | 0.99 | VP/Head reports to the executive who owns their portfolio |
 | `vp_to_ceo_no_exec` | 0.99 | VP/Head reports to the CEO because no executive owns their portfolio |
-| `exec_to_ceo` | 0.995 | Executive reports to the CEO |
-| `junior_to_lead` | 0.995 | Junior or intermediate IC reports to the Team Lead of the same team |
-| `senior_to_manager` | 0.99 | Senior, Staff or Principal IC reports to the Manager of the same team |
-| `lead_to_manager` | 0.995 | Team Lead reports to the Manager of the same team |
-| `junior_to_manager` | 0.99 | Junior or intermediate IC reports to the same-team Manager; the function has no Team Lead |
-| `director_to_vp` | 0.99 | Director reports to the VP/Head of the same function |
-| `manager_to_director` | 0.99 | Manager reports to the Director of the same function; no Senior Manager in between |
-| `manager_to_vp` | 0.99 | Manager reports to the VP/Head of the same function; no Director or Senior Manager in between |
+| `office_to_vp` | 0.99 | IC in the executive office reports to the VP/Head of their department |
+| `director_to_vp` | 0.99 | Director reports to the VP/Head of the same department |
+| `manager_to_director` | 0.99 | Manager reports to the Director on the parent team |
+| `manager_to_vp` | 0.99 | Manager reports to the VP/Head on the parent team |
 | `next_level_up` | 0.99 | Management role reports to the next level up on the same or parent team |
-| `ceo_only` | 0.45 | The CEO, who is a candidate for everyone |
-| `same_team_only` | 0.90 | Same team, but no rule above applies |
-| `parent_team_only` | 0.85 | Parent team, but no rule above applies |
-| `same_function_only` | 0.67 | Same function, different team |
-| `title_only` | 0.45 | A management title above this person, nothing else |
+| `lead_to_manager` | 0.99 | Team Lead reports to the Manager of the same team |
+| `senior_to_manager` | 0.99 | Senior, Staff or Principal IC reports to the Manager of the same team |
+| `junior_to_lead` | 0.99 | Junior or intermediate IC reports to the Team Lead of the same team |
+| `junior_to_manager` | 0.99 | Junior or intermediate IC reports to the Manager of the same team; the team has no Team Lead |
+| `untitled_to_manager` | 0.99 | No job title, but the team has one Manager and no Team Lead |
+| `closer_level_elsewhere` | 0.96 | Someone at a closer level in this department is not on this team path and could be the manager |
+| `untitled_colleague` | 0.96 | Someone on this team path has no job title and could be the manager |
+| `same_team_only` | 0.90 | Same team, but someone closer is expected |
+| `parent_team_only` | 0.85 | Higher up the team path, but someone closer is expected |
+| `same_department_only` | 0.67 | Same department, team not matched |
 
-The last five sit below the 0.98 threshold, so they never create a line on their own. They only decide which candidate is shown as "unconfirmed" for people who stay unresolved. A shared location adds 0.002 to any score as a tie-break. The 0.995 rules outrank the 0.99 rules when both fit, and two candidates on the same rule block each other through the 0.04 margin.
+The first thirteen are the strong rules. They are one idea written out per pair of levels: a person reports to the lowest rank above them on their own team path. `reporting_ladder` says which ranks each level can report to.
+
+The two rival rules score 0.96. That is below the 0.98 threshold, so a rival is never accepted, and within 0.04 of a strong rule, so a rival holds the line back. This is how "a team lead with no team could be this junior's real manager" stops the junior from being attached to the manager.
+
+The last three never create a line. They only decide which candidate is shown as "unconfirmed" for people who stay unresolved. A shared location adds 0.002 to any score as a tie-break, and two candidates on the same strong rule block each other through the 0.04 margin.
 
 ## Key decisions
 
@@ -55,6 +61,8 @@ The last five sit below the 0.98 threshold, so they never create a line on their
 - Treat people management and individual-contributor seniority as separate tracks. Senior, Staff and Principal ICs do not become managers because of title seniority.
 - Vary the C-suite by company size and industry rather than assigning every executive role to every company.
 - Use team paths, function, leadership level and location as visible evidence for each candidate.
+- Believe a team only when it agrees with the job title. A team path from another department is treated as missing.
+- Fill a missing team by elimination only, when exactly one team is possible. Nothing is guessed from a title alone.
 - Accept a manager only when the top score reaches `0.98` and leads the next candidate by at least `0.04`; otherwise leave the line unresolved.
 - Give every rule a name and a fixed score, so each accepted line can be traced to one row of `reporting_rules` and the results can be reported per rule.
 - Keep the answer key outside the operational database so evaluation cannot influence inference.
@@ -74,9 +82,9 @@ The review process also helped me refine two useful additions: a queryable `repo
 
 ## Measurement
 
-Rules were developed on companies 1–350, checked on companies 351–425, and tested on companies 426–500. The held-out set contains 13,447 employees across 75 companies. SQL accepted 10,235 reporting lines; 10,100 matched the independent answer key and 135 did not. That is **98.68% precision at 76.54% coverage**. These figures measure performance on the generated dataset and should not be treated as real-company accuracy.
+The rules were worked out on companies 1–350 and scored on companies 426–500. That set contains 13,447 employees across 75 companies. SQL accepted 11,431 reporting lines; 11,400 matched the independent answer key and 31 did not. That is **99.73% precision at 85.48% coverage**. The scores for companies 426–500 were visible while these rules were being adjusted, so this is not a strictly blind test. These figures measure performance on the generated dataset and should not be treated as real-company accuracy.
 
-Precision is correct accepted lines divided by all accepted lines. Coverage is accepted lines divided by employees who have a manager in the answer key. `scripts/evaluate_sql_inference.py` also reports both per rule; the [results page](https://meet2712.github.io/orggraph-python/results.html) shows that table. The weakest rule is `next_level_up` at 96.7% and the strongest four are at 100%.
+Precision is correct accepted lines divided by all accepted lines. Coverage is accepted lines divided by employees who have a manager in the answer key. `scripts/evaluate_sql_inference.py` also reports both per rule; the [results page](https://meet2712.github.io/orggraph-python/results.html) shows that table. The weakest rule is `next_level_up` at 98.5% and 9 of the 13 strong rules are at 100%.
 
 Run the checks with:
 

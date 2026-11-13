@@ -58,11 +58,14 @@ explicit management cue identifies a people-management role.
 ## Inference rule
 
 The operational database derives features and manager choices in SQL views.
-It normalizes explicit management titles, filters to more-senior candidates in
-the same company, and matches each pair against the named rules in
-`reporting_rules` (see the table in the README). A candidate is accepted only
-when the rule's score and its lead over the next candidate clear the thresholds
-in the `reporting_thresholds` view. Ties and missing evidence remain unresolved.
+It normalizes job titles, settles each person's team, and looks for the lowest
+rank above them on their own team path. Staff look on their own team; managers
+also look one team up. `reporting_ladder` lists which ranks each level can
+report to, and `reporting_rules` names every pair (see the table in the README).
+A candidate is accepted only when the rule's score and its lead over the next
+candidate clear the thresholds in the `reporting_thresholds` view. Someone who
+could sit in between, such as a team lead with no team, is scored just below the
+threshold and holds the line back. Ties and missing evidence remain unresolved.
 Senior, Staff and Principal IC titles do not become managers just because of
 their seniority.
 
