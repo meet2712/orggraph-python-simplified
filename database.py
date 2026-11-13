@@ -153,7 +153,7 @@ def check_loaded_database(connection, company_count, employee_count):
     if connection.execute("pragma foreign_key_check").fetchone():
         raise ValueError("Foreign-key validation failed")
     required_views = {
-        "reporting_thresholds", "reporting_rules", "company_overview",
+        "reporting_thresholds", "reporting_rules", "reporting_ladder", "company_overview",
         "employee_role_classification", "employee_reporting_features",
         "employee_manager_candidates", "employee_manager_scores",
         "employee_top_manager_candidates", "employee_reporting_decisions",
