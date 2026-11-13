@@ -1,0 +1,302 @@
+{% macro person_row(person) -%}
+  <button type="button" class="person-row" data-person="{{ person.id }}" aria-label="View {{ person.name }}">
+    <span class="person-avatar" aria-hidden="true">{{ person.name.split()[0][0] }}{{ person.name.split()[-1][0] }}</span>
+    <span class="person-name">
+      <strong>{{ person.name }}</strong>
+      <small>{{ person.title or 'Title missing' }}</small>
+      {% if person.predictedManagerId %}
+        <small>Reports to {{ employees_by_id[person.predictedManagerId].name }}</small>
+      {% elif person.inferredLevel != 'CEO' %}
+        <small>{{ person.reason }}</small>
+      {% endif %}
+      {% if not person.predictedManagerId and person.bestCandidateId %}
+        <small>Unconfirmed candidate: {{ employees_by_id[person.bestCandidateId].name }}</small>
+      {% endif %}
+    </span>
+    {% if person.predictedManagerId %}
+      <span class="person-status accepted">Evidence {{ person.confidence|percent }}</span>
+    {% elif person.inferredLevel == 'CEO' %}
+      <span class="person-status">Company root</span>
+    {% else %}
+      <span class="person-status unknown">Review evidence</span>
+    {% endif %}
+    <span class="row-arrow" aria-hidden="true">›</span>
+  </button>
+{%- endmacro %}
+
+{% macro person_card(person) -%}
+  <button type="button" class="org-person-card" data-person="{{ person.id }}" aria-label="View {{ person.name }}">
+    <span class="card-avatar" aria-hidden="true">{{ person.name.split()[0][0] }}{{ person.name.split()[-1][0] }}</span>
+    <strong class="card-name">{{ person.name }}</strong>
+    <span class="card-title">{{ person.title or 'Title missing' }}</span>
+    <span class="card-meta" title="{{ person.inferredDepartment }} · {{ person.location }}">{{ person.inferredDepartment }} · {{ person.location }}</span>
+    {% if person.predictedManagerId %}
+      <span class="card-status accepted">Evidence {{ person.confidence|percent }}</span>
+    {% elif person.inferredLevel == 'CEO' %}
+      <span class="card-status root-status">Company root</span>
+    {% else %}
+      <span class="card-status unknown">Needs review</span>
+    {% endif %}
+  </button>
+{%- endmacro %}
+
+{% macro branch(person, depth=0, first=true, last=true) -%}
+  {% set reports = children.get(person.id, []) %}
+  <li class="tree-node{% if first %} first{% endif %}{% if last %} last{% endif %}" data-employee="{{ person.id }}" data-manager="{{ person.predictedManagerId or '' }}" data-department="{{ person.inferredDepartment }}" data-search="{{ (person.name ~ ' ' ~ person.title ~ ' ' ~ person.inferredDepartment)|lower }}">
+    {{ person_card(person) }}
+    {% if reports %}
+      <details class="branch" data-depth="{{ depth }}" {% if depth == 0 %}open{% endif %}>
+        <summary class="report-toggle" aria-label="Show or hide {{ reports|length }} direct reports for {{ person.name }}"><span>{{ reports|length }}</span> direct {{ 'report' if reports|length == 1 else 'reports' }} <span class="report-chevron" aria-hidden="true">⌄</span></summary>
+        <ul class="tree-children">
+          {% for report in reports %}{{ branch(report, depth + 1, loop.first, loop.last) }}{% endfor %}
+        </ul>
+      </details>
+    {% endif %}
+  </li>
+{%- endmacro %}
+
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Explore reporting lines inferred by SQL views, review uncertain matches, and see how the rules were tested.">
+  <title>{{ company.company.name ~ ' · ' if page == 'chart' else '' }}OrgGraph</title>
+  <link rel="stylesheet" href="/style.css{% if page == 'schema' %}?v=schema-width{% endif %}">
+  <script src="/app.js?v=reporting-groups" defer></script>
+  {% if page == 'data' %}
+  <link rel="stylesheet" href="/workbench.css">
+  <script src="/sql-workbench.js?v=3" defer></script>
+  {% endif %}
+</head>
+<body>
+  <a class="skip-link" href="#main-content">Skip to content</a>
+  <header class="site-header">
+    <a class="brand" href="/" aria-label="OrgGraph home">
+      <svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M12 8v5M5 17v-4h14v4"/><rect x="9" y="2" width="6" height="6" rx="1"/><rect x="2" y="17" width="6" height="5" rx="1"/><rect x="9" y="17" width="6" height="5" rx="1"/><rect x="16" y="17" width="6" height="5" rx="1"/></svg>
+      <strong>OrgGraph<span class="brand-dot">.</span></strong>
+    </a>
+    <nav aria-label="Main navigation">
+      <a href="/" {% if page == 'chart' %}aria-current="page"{% endif %}>Org chart</a>
+      <a href="/results.html" {% if page == 'results' %}aria-current="page"{% endif %}>Results</a>
+      <a href="/approach.html" {% if page == 'approach' %}aria-current="page"{% endif %}>How it works</a>
+      <a href="/data.html" {% if page in ['data', 'schema'] %}aria-current="page"{% endif %}>Database &amp; SQL</a>
+    </nav>
+    <a class="header-download" href="/downloads/orggraph-source.zip" download><span aria-hidden="true">↓</span> Download source</a>
+  </header>
+
+  {% if page == 'chart' %}
+  <div class="workspace">
+    <aside class="company-sidebar" aria-label="Company directory">
+      <div class="directory-heading"><h2>Companies</h2><span>{{ index.summary.companyCount|count }}</span></div>
+      <p class="directory-note muted">Choose a company to explore.</p>
+      <label class="search-field">
+        <span aria-hidden="true">⌕</span>
+        <span class="sr-only">Search companies by name or industry</span>
+        <input id="company-search" type="search" placeholder="Search name or industry" autocomplete="off">
+      </label>
+      <p id="company-result-count" class="result-count" aria-live="polite">{{ companies|length }} companies</p>
+      <div class="company-list" id="company-list">
+        {% for item in companies %}
+        <a href="/companies/{{ item.id }}.html" data-company-search="{{ (item.name ~ ' ' ~ item.industry ~ ' ' ~ item.id)|lower }}" {% if item.id == selected_id %}aria-current="page"{% endif %}>
+          <span class="company-initial" aria-hidden="true">{{ item.name[0] }}</span>
+          <span class="company-name"><strong>{{ item.name }}</strong><small>{{ item.industry }} · {{ item.employeeCount }} people</small></span>
+        </a>
+        {% endfor %}
+      </div>
+      <p id="no-companies" class="empty-state" hidden>No companies match this search.</p>
+
+    </aside>
+
+    <main class="company-workspace" id="main-content">
+      <div class="company-context">
+      <header class="company-heading">
+        <p class="company-meta">{{ company.company.industry }}<span>·</span>{{ company.company.headquarters }}</p>
+        <h1>{{ company.company.name }}</h1>
+        <p>A closer look at who reports to whom.</p>
+      </header>
+      <dl class="company-stats">
+        <div><dt>People</dt><dd>{{ company.company.employeeCount|count }}</dd></div>
+        <div><dt>Inferred reporting lines</dt><dd>{{ company.summary.resolved|count }}</dd></div>
+        <div><dt>Managers unresolved</dt><dd>{{ unresolved|length }}</dd></div>
+      </dl>
+      </div>
+
+      <section class="chart-section" aria-label="Inferred reporting structure">
+        <div class="chart-tabs" aria-label="Choose chart or review list">
+          <button type="button" data-view="chart" aria-pressed="true" aria-controls="chart-view">Reporting lines</button>
+          <button type="button" data-view="review" aria-pressed="false" aria-controls="review-view">Needs review <span>{{ unresolved|length }}</span></button>
+          <button type="button" data-view="people" aria-pressed="false" aria-controls="review-view">All people <span>{{ company.employees|length }}</span></button>
+        </div>
+        <div class="chart-toolbar">
+          <label class="department-filter">
+            <span class="sr-only">Filter by department</span>
+            <select id="department-filter">
+              <option value="">All departments</option>
+              {% for department in company.employees|map(attribute='inferredDepartment')|unique|sort %}
+              <option value="{{ department }}">{{ department }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label class="search-field people-search">
+            <span aria-hidden="true">⌕</span>
+            <span class="sr-only">Find a person or role</span>
+            <input id="people-search" type="search" placeholder="Find a person or role" autocomplete="off">
+          </label>
+        <div class="group-toolbar" id="group-toolbar">
+          <label for="group-filter" class="sr-only">Reporting group</label>
+          <select id="group-filter">
+            <option value="">All {{ roots|length }} reporting groups</option>
+            {% for person in roots %}
+            <option value="{{ person.id }}" {% if person.inferredLevel == 'CEO' %}selected{% endif %}>{{ 'Company leadership' if person.inferredLevel == 'CEO' else 'Separate group' }} · {{ person.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+          <button type="button" class="text-button expand-button" id="expand-teams">Expand all</button>
+        </div>
+        <p class="chart-explanation" id="chart-explanation">Follow the lines from each manager to their direct reports. Select a person for details, or open the report count to see their team.</p>
+        <div class="chart-stage">
+        <div id="chart-view" class="chart-viewport" tabindex="0" role="region" aria-label="Org chart. Scroll or use arrow keys to move around the chart.">
+          <div class="chart-scale" id="chart-scale">
+            <div class="chart-canvas" id="chart-canvas">
+              {% for person in roots %}
+              <section class="reporting-group" data-root-id="{{ person.id }}" aria-label="{{ 'Company leadership' if person.inferredLevel == 'CEO' else 'Separate reporting group for ' ~ person.name }}">
+                <div class="group-caption">
+                  <span class="group-kind">{{ 'Company leadership' if person.inferredLevel == 'CEO' else 'Separate reporting group' }}</span>
+                  {% if person.inferredLevel != 'CEO' %}<span class="group-reason">{{ person.name }}’s manager is unknown. Their accepted reports are shown below.</span>{% endif %}
+                </div>
+                <ul class="org-tree" aria-label="{{ person.name }} and accepted direct reports">{{ branch(person) }}</ul>
+              </section>
+              {% endfor %}
+            </div>
+          </div>
+        </div>
+        <div class="canvas-controls" id="canvas-controls">
+          <span>Drag the background to move around</span>
+          <div class="zoom-controls" aria-label="Chart zoom">
+            <button type="button" id="zoom-out" aria-label="Zoom out">−</button>
+            <output id="zoom-level" aria-live="polite">100%</output>
+            <button type="button" id="zoom-in" aria-label="Zoom in">+</button>
+            <button type="button" id="zoom-fit">Fit</button>
+            <button type="button" id="zoom-reset">Reset</button>
+          </div>
+        </div>
+        </div>
+        <div id="review-view" class="unresolved-list" hidden>
+          {% for person in company.employees %}
+          <div data-review-person data-unresolved="{{ 'true' if person in unresolved else 'false' }}" data-department="{{ person.inferredDepartment }}" data-search="{{ (person.name ~ ' ' ~ person.title ~ ' ' ~ person.inferredDepartment)|lower }}">{{ person_row(person) }}</div>
+          {% endfor %}
+        </div>
+        <p id="no-people" class="empty-state" hidden>No people match these filters. Try another department or search.</p>
+        <div class="chart-bottom">
+          <span id="people-result-count" aria-live="polite">{{ company.summary.resolved }} reporting lines · {{ company.summary.coverage|percent }} coverage</span>
+        </div>
+      </section>
+      <p class="company-footnote">This company and its people are generated. A line is accepted when its evidence score is at least {{ threshold.score|percent }} and the lead over the next candidate is at least {{ threshold.margin|points }} percentage points. Uncertain matches stay in Needs review.</p>
+      <noscript><p class="note">Company links and reporting branches work without JavaScript. Enable JavaScript to search, filter, and open a person’s details.</p></noscript>
+    </main>
+  </div>
+
+  <script type="application/json" id="company-records">{{ company.employees|tojson }}</script>
+  <dialog class="person-dialog" id="person-dialog" aria-labelledby="dialog-name">
+    <form method="dialog"><button class="close-button" aria-label="Close details">✕</button></form>
+    <span class="person-avatar large" id="dialog-avatar" aria-hidden="true"></span>
+    <h2 id="dialog-name" tabindex="-1"></h2>
+    <p class="muted" id="dialog-title"></p>
+    <dl class="person-facts">
+      <div><dt>Inferred department</dt><dd id="dialog-department"></dd></div>
+      <div><dt>Inferred seniority</dt><dd id="dialog-level"></dd></div>
+      <div><dt>Team in the input</dt><dd id="dialog-team"></dd></div>
+      <div><dt>Location</dt><dd id="dialog-location"></dd></div>
+    </dl>
+    <section class="decision-section">
+      <h3 id="dialog-decision-title"></h3>
+      <button type="button" class="manager-link" id="dialog-manager" hidden><span id="dialog-manager-name"></span> <span aria-hidden="true">↗</span></button>
+      <p id="dialog-decision-description"></p>
+      <dl class="decision-numbers" id="dialog-decision-numbers">
+        <div><dt>Evidence score</dt><dd id="dialog-confidence"></dd><small>Needs {{ threshold.score|percent }}</small></div>
+        <div><dt>Lead over next candidate</dt><dd id="dialog-margin"></dd><small>Percentage points · needs {{ threshold.margin|points }}</small></div>
+      </dl>
+      <div id="dialog-signals">
+        <h4>Which rule matched</h4>
+        <ul class="reason-list" id="dialog-reasons"></ul>
+      </div>
+      <p class="small-note" id="dialog-confidence-note">The evidence score summarizes the SQL rules supporting this candidate.</p>
+    </section>
+    <section class="record-section">
+      <details id="dialog-record-disclosure">
+        <summary>See the original record</summary>
+        <dl class="person-facts">
+          <div><dt>Original title</dt><dd id="dialog-original-title"></dd></div>
+          <div><dt>Original department</dt><dd id="dialog-original-department"></dd></div>
+          <div><dt>Record ID</dt><dd id="dialog-record-id"></dd></div>
+        </dl>
+      </details>
+    </section>
+  </dialog>
+
+  {% elif page == 'data' %}
+  {% include 'workbench.html' %}
+
+  {% elif page == 'results' %}
+  <main class="document-page" id="main-content">
+    <header class="page-heading">
+      <p class="muted">Held-out benchmark</p>
+      <h1>Reporting-line results</h1>
+      <p>SQL reporting decisions were compared with an independent answer key for {{ sql_evaluation.companies }} held-out companies.</p>
+    </header>
+    <dl class="stats-row" aria-label="Held-out SQL inference benchmark">
+      <div class="stat"><dt>Precision among accepted lines</dt><dd>{{ sql_evaluation.precision|percent }}</dd></div>
+      <div class="stat"><dt>Coverage of possible lines</dt><dd>{{ sql_evaluation.coverage|percent }}</dd></div>
+      <div class="stat"><dt>Accepted reporting lines</dt><dd>{{ sql_evaluation.accepted_reporting_lines|count }}</dd></div>
+    </dl>
+    <section class="paper-section">
+      <h2>What was checked</h2>
+      <p>On {{ sql_evaluation.employees|count }} people in the held-out companies, the SQL rules accepted {{ sql_evaluation.accepted_reporting_lines|count }} reporting lines: {{ sql_evaluation.correct_reporting_lines|count }} matched the independently generated manager and {{ sql_evaluation.incorrect_reporting_lines|count }} did not. Precision is correct lines divided by accepted lines. Coverage is accepted lines divided by people with a true manager.</p>
+      <p class="note">Precision covers accepted lines only. Lower coverage reflects employees left unresolved when the evidence is ambiguous.</p>
+    </section>
+    <section class="paper-section">
+      <h2>Results by rule</h2>
+      <p>Every accepted line comes from one named rule in <code>reporting_rules</code>. This table shows how often each rule fired on the held-out companies and how often it was right.</p>
+      <div class="table-scroll"><table class="simple-table"><thead><tr><th scope="col">Rule</th><th scope="col">What it matches</th><th scope="col">Accepted</th><th scope="col">Correct</th><th scope="col">Precision</th></tr></thead><tbody>
+        {% for row in sql_evaluation.by_rule %}<tr><th scope="row"><code>{{ row.rule }}</code></th><td>{{ row.description }}</td><td>{{ row.accepted|count }}</td><td>{{ row.correct|count }}</td><td>{{ row.precision|percent }}</td></tr>{% endfor %}
+      </tbody></table></div>
+    </section>
+    <section class="paper-section">
+      <h2>What the score means</h2>
+      <p>Each rule carries a fixed score. A line is accepted only when the best candidate's score reaches {{ threshold.score|percent }} and leads the next candidate by {{ threshold.margin|points }} percentage points. Rules below the threshold never create a line on their own; they only pick the candidate shown for people who stay unresolved.</p>
+    </section>
+  </main>
+
+  {% elif page == 'schema' %}
+  {% include 'schema.html' %}
+  {% elif page == 'approach' %}
+  {% set dataset = dataset_summary %}
+  <main class="document-page" id="main-content">
+    <header class="page-heading"><p class="muted">How it works</p><h1>From job titles to reporting lines</h1><p>The database starts with a flat employee list. SQL views interpret each row and calculate reporting lines whenever the source changes.</p></header>
+    <section class="paper-section">
+      <h2>1. Generate messy source records</h2>
+      <p>The Python generator creates {{ dataset.companies|count }} companies and {{ dataset.employees|count }} employees with varied functions, seniority, team sizes, missing fields and title noise. It also writes a separate answer key for offline evaluation.</p>
+    </section>
+    <section class="paper-section score-explainer">
+      <h2>2. Calculate the hierarchy in SQL</h2>
+      <div class="score-flow" role="list" aria-label="Reporting-line inference stages">
+        <article class="score-stage" role="listitem"><span class="score-step">01 · Input</span><h3>Read source rows</h3><p><code>companies</code> and <code>employees</code> are the only persisted tables. Titles, department, team and location remain as observed.</p></article>
+        <article class="score-stage" role="listitem"><span class="score-step">02 · Parse</span><h3>Infer role level</h3><p><code>employee_reporting_features</code> reads title abbreviations, function and seniority. A specific role can help when a team is missing.</p></article>
+        <article class="score-stage" role="listitem"><span class="score-step">03 · Compare</span><h3>Match a rule</h3><p>Only people with a management title above the person, in the same company, are candidates. The first rule in <code>reporting_rules</code> that fits a pair sets its score.</p></article>
+        <article class="score-stage" role="listitem"><span class="score-step">04 · Decide</span><h3>Accept or abstain</h3><p><code>employee_reporting_decisions</code> compares the top candidates. It creates an edge only when the score and the lead over second place both clear their thresholds.</p></article>
+      </div>
+      <div class="score-formula-grid">
+        <article class="formula-card"><span class="formula-label">Evidence score</span><code>score = rule score + location tie-break</code><p>Twelve rules score 0.99 or above and can be accepted on their own. Five weak rules sit below the threshold and only rank the candidate shown for unresolved people. A shared location adds 0.2 points.</p></article>
+        <article class="formula-card"><span class="formula-label">Lead over next candidate</span><code>lead = top score − second score</code><p>If two candidates look too similar, the SQL rules leave the manager unresolved.</p></article>
+        <article class="formula-card"><span class="formula-label">Acceptance</span><code>score ≥ {{ threshold.score|percent }} and lead ≥ {{ threshold.margin|points }} points</code><p>Thresholds are visible in the <code>reporting_thresholds</code> view and decision audit.</p></article>
+      </div>
+    </section>
+    <section class="paper-section"><h2>3. Inspect the decision</h2><p><code>employee_reporting_audit</code> joins the raw employee row with inferred features, the selected manager or leading candidate, score, margin, the rule that matched and a one-line reason. <code>company_overview</code> and <code>company_reporting_summary</code> calculate headcount, size band and coverage from current rows. Each app page runs a company-scoped SQL form of the same inference rules for speed.</p><p>Follow the tables and views on the <a href="/schema.html">database diagram</a>, or run a query in the <a href="/data.html">database explorer</a>. The source download contains every <code>create view</code> statement.</p></section>
+    <section class="paper-section"><h2>4. Check quality separately</h2><p>The offline evaluator compares SQL decisions with the answer CSV. Coverage measures how many possible lines were accepted, while precision measures how many accepted lines match the answer key.</p></section>
+    <section class="paper-section"><h2>Try it yourself</h2><p>The source package includes the generator, schema, app and quality queries. The dataset package includes observed records and the separate answer key.</p><div class="download-row"><a class="button" href="/downloads/firmable-org-chart-dataset.zip" download>Download dataset</a><a class="button" href="/downloads/orggraph-source.zip" download>Download source</a></div></section>
+  </main>
+  {% endif %}
+
+</body>
+</html>
