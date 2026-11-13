@@ -3,52 +3,52 @@
   "employees": 13447,
   "roots": 75,
   "eligible_reporting_lines": 13372,
-  "accepted_reporting_lines": 10235,
-  "correct_reporting_lines": 10100,
-  "incorrect_reporting_lines": 135,
-  "precision": 0.9868,
-  "coverage": 0.7654,
-  "recall": 0.7553,
+  "accepted_reporting_lines": 11431,
+  "correct_reporting_lines": 11400,
+  "incorrect_reporting_lines": 31,
+  "precision": 0.9973,
+  "coverage": 0.8548,
+  "recall": 0.8525,
   "by_rule": [
     {
       "rule": "senior_to_manager",
       "group": "team",
       "description": "Senior, Staff or Principal IC reports to the Manager of the same team",
-      "accepted": 3060,
-      "correct": 3018,
-      "precision": 0.9863
+      "accepted": 3672,
+      "correct": 3664,
+      "precision": 0.9978
     },
     {
       "rule": "junior_to_lead",
       "group": "team",
       "description": "Junior or intermediate IC reports to the Team Lead of the same team",
-      "accepted": 2251,
-      "correct": 2197,
-      "precision": 0.976
+      "accepted": 2581,
+      "correct": 2578,
+      "precision": 0.9988
     },
     {
       "rule": "junior_to_manager",
       "group": "team",
-      "description": "Junior or intermediate IC reports to the same-team Manager; the function has no Team Lead",
-      "accepted": 1542,
-      "correct": 1528,
-      "precision": 0.9909
-    },
-    {
-      "rule": "specialty_match",
-      "group": "specialty",
-      "description": "Team is missing on one side, but the IC and the manager share a specific specialty",
-      "accepted": 803,
-      "correct": 792,
-      "precision": 0.9863
+      "description": "Junior or intermediate IC reports to the Manager of the same team; the team has no Team Lead",
+      "accepted": 2006,
+      "correct": 1988,
+      "precision": 0.991
     },
     {
       "rule": "manager_to_vp",
       "group": "ladder",
-      "description": "Manager reports to the VP/Head of the same function; no Director or Senior Manager in between",
-      "accepted": 633,
-      "correct": 627,
-      "precision": 0.9905
+      "description": "Manager reports to the VP/Head on the parent team",
+      "accepted": 752,
+      "correct": 752,
+      "precision": 1.0
+    },
+    {
+      "rule": "lead_to_manager",
+      "group": "team",
+      "description": "Team Lead reports to the Manager of the same team",
+      "accepted": 610,
+      "correct": 610,
+      "precision": 1.0
     },
     {
       "rule": "vp_to_matching_exec",
@@ -59,51 +59,59 @@
       "precision": 1.0
     },
     {
-      "rule": "lead_to_manager",
-      "group": "team",
-      "description": "Team Lead reports to the Manager of the same team",
-      "accepted": 469,
-      "correct": 467,
-      "precision": 0.9957
-    },
-    {
       "rule": "manager_to_director",
       "group": "ladder",
-      "description": "Manager reports to the Director of the same function; no Senior Manager in between",
-      "accepted": 288,
-      "correct": 288,
+      "description": "Manager reports to the Director on the parent team",
+      "accepted": 320,
+      "correct": 320,
       "precision": 1.0
     },
     {
       "rule": "exec_to_ceo",
       "group": "executive",
       "description": "Executive reports to the CEO",
-      "accepted": 226,
-      "correct": 226,
+      "accepted": 234,
+      "correct": 234,
       "precision": 1.0
     },
     {
       "rule": "vp_to_ceo_no_exec",
       "group": "executive",
       "description": "VP/Head reports to the CEO because no executive owns their portfolio",
-      "accepted": 158,
-      "correct": 156,
-      "precision": 0.9873
+      "accepted": 209,
+      "correct": 209,
+      "precision": 1.0
+    },
+    {
+      "rule": "director_to_vp",
+      "group": "ladder",
+      "description": "Director reports to the VP/Head of the same department",
+      "accepted": 150,
+      "correct": 150,
+      "precision": 1.0
+    },
+    {
+      "rule": "office_to_vp",
+      "group": "executive",
+      "description": "IC in the executive office reports to the VP/Head of their department",
+      "accepted": 131,
+      "correct": 131,
+      "precision": 1.0
     },
     {
       "rule": "next_level_up",
       "group": "ladder",
       "description": "Management role reports to the next level up on the same or parent team",
-      "accepted": 121,
-      "correct": 117,
-      "precision": 0.9669
+      "accepted": 131,
+      "correct": 129,
+      "precision": 0.9847
     },
     {
-      "rule": "director_to_vp",
-      "group": "ladder",
-      "description": "Director reports to the VP/Head of the same function",
-      "accepted": 114,
-      "correct": 114,
+      "rule": "untitled_to_manager",
+      "group": "team",
+      "description": "No job title, but the team has one Manager and no Team Lead",
+      "accepted": 65,
+      "correct": 65,
       "precision": 1.0
     }
   ]
