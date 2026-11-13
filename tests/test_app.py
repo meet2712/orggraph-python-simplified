@@ -83,12 +83,13 @@ class SourceDatabaseTests(unittest.TestCase):
             self.assertEqual(tables, {"companies", "employees"})
             views = {row[0] for row in connection.execute(
                 "select name from sqlite_master where type = 'view'")}
-            self.assertEqual(len(views), 12)
+            self.assertEqual(len(views), 13)
             self.assertIn("employee_role_classification", views)
             self.assertIn("employee_reporting_features", views)
             self.assertIn("employee_reporting_decisions", views)
             self.assertIn("company_reporting_summary", views)
             self.assertIn("reporting_rules", views)
+            self.assertIn("reporting_ladder", views)
             self.assertNotIn("employee_text", views)
             self.assertNotIn("employee_role_profiles", views)
             self.assertNotIn("benchmark_labels", tables | views)
