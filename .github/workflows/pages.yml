@@ -33,7 +33,7 @@ jobs:
       - run: python scripts/build_database.py
       - run: python scripts/check_database_views.py
       - run: python scripts/evaluate_sql_inference.py --min-precision 0.98 --output public/data/sql_evaluation.json
-      - run: python scripts/export_site.py --base-path /orggraph-python
+      - run: python scripts/export_site.py --base-path /orggraph-python-simplified
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v4
         with:

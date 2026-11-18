@@ -1,6 +1,6 @@
 # OrgGraph
 
-OrgGraph infers reporting lines from a flat list of employees. The hosted app is available on [GitHub Pages](https://meet2712.github.io/orggraph-python/), with a [browser SQL explorer](https://meet2712.github.io/orggraph-python/data.html) and an interactive [database diagram](https://meet2712.github.io/orggraph-python/schema.html).
+OrgGraph infers reporting lines from a flat list of employees. The hosted app is available on [GitHub Pages](https://meet2712.github.io/orggraph-python-simplified/), with a [browser SQL explorer](https://meet2712.github.io/orggraph-python-simplified/data.html) and an interactive [database diagram](https://meet2712.github.io/orggraph-python-simplified/schema.html).
 
 The repository contains 500 generated companies and 87,160 employees. Job titles, departments, teams, locations and missing values are deliberately inconsistent so the inference runs against realistic input rather than pre-cleaned records.
 
@@ -84,7 +84,7 @@ The review process also helped me refine two useful additions: a queryable `repo
 
 The rules were worked out on companies 1–350 and scored on companies 426–500. That set contains 13,447 employees across 75 companies. SQL accepted 11,431 reporting lines; 11,400 matched the independent answer key and 31 did not. That is **99.73% precision at 85.48% coverage**. The scores for companies 426–500 were visible while these rules were being adjusted, so this is not a strictly blind test. These figures measure performance on the generated dataset and should not be treated as real-company accuracy.
 
-Precision is correct accepted lines divided by all accepted lines. Coverage is accepted lines divided by employees who have a manager in the answer key. `scripts/evaluate_sql_inference.py` also reports both per rule; the [results page](https://meet2712.github.io/orggraph-python/results.html) shows that table. The weakest rule is `next_level_up` at 98.5% and 9 of the 13 strong rules are at 100%.
+Precision is correct accepted lines divided by all accepted lines. Coverage is accepted lines divided by employees who have a manager in the answer key. `scripts/evaluate_sql_inference.py` also reports both per rule; the [results page](https://meet2712.github.io/orggraph-python-simplified/results.html) shows that table. The weakest rule is `next_level_up` at 98.5% and 9 of the 13 strong rules are at 100%.
 
 Run the checks with:
 
@@ -100,8 +100,8 @@ python scripts/evaluate_sql_inference.py
 Use Python 3.11 or later:
 
 ```bash
-git clone https://github.com/meet2712/orggraph-python.git
-cd orggraph-python
+git clone https://github.com/meet2712/orggraph-python-simplified.git
+cd orggraph-python-simplified
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -r requirements.txt
